@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
 import { assignChores, weekIndex, weekStart } from "./rotation.mjs";
 import { Layout, SignInPage, HouseListPage, HousePage, SetupPage } from "./pages";
@@ -12,7 +13,7 @@ type Bindings = {
   LOCAL_USER_ID?: string;
   LOCAL_USER_NAME?: string;
 };
-type Variables = { userId: string | null };
+type Variables = { userId: string | null; isGuest: boolean };
 type App = { Bindings: Bindings; Variables: Variables };
 
 export type Member = { id: number; user_id: string; display_name: string };
@@ -39,9 +40,33 @@ const DEFAULT_AREAS: [string, string][] = [
 ];
 const MAXIMUM_PHOTO_BYTES = 1_500_000;
 
+// A guest has no account. The guest cookie holds a random secret, and the
+// database stores only a hash of it, so a database row cannot act as the guest.
+const GUEST_SECRET_COOKIE = "guest_secret";
+const GUEST_NAME_COOKIE = "guest_name";
+const GUEST_COOKIE_SECONDS = 60 * 60 * 24 * 365;
+
 const app = new Hono<App>();
 
 const isLocalMode = (c: Context<App>) => Boolean(c.env.LOCAL_USER_ID);
+
+async function guestUserId(secret: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  const hex = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  return `guest_${hex.slice(0, 32)}`;
+}
+
+// Accept only a path on this site as the return address.
+function safeReturnPath(value: unknown): string {
+  const path = String(value ?? "");
+  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
+}
+
+// Properties that every page passes to the layout. A guest page loads no Clerk script.
+function layoutAccess(c: Context<App>) {
+  const isGuest = c.get("isGuest");
+  return { publishableKey: isGuest ? undefined : c.env.CLERK_PUBLISHABLE_KEY, signedIn: true, isGuest };
+}
 
 // Reject a state-changing request that does not come from this origin.
 app.use("*", async (c, next) => {
@@ -53,18 +78,54 @@ app.use("*", async (c, next) => {
 });
 
 app.use("*", async (c, next) => {
+  c.set("isGuest", false);
   if (isLocalMode(c)) {
     c.set("userId", c.env.LOCAL_USER_ID ?? null);
     return next();
   }
   return clerkMiddleware()(c, async () => {
-    c.set("userId", getAuth(c)?.userId ?? null);
+    const clerkUserId = getAuth(c)?.userId ?? null;
+    const guestSecret = getCookie(c, GUEST_SECRET_COOKIE);
+    if (clerkUserId) {
+      c.set("userId", clerkUserId);
+    } else if (guestSecret && /^[0-9a-f]{64}$/.test(guestSecret)) {
+      c.set("userId", await guestUserId(guestSecret));
+      c.set("isGuest", true);
+    } else {
+      c.set("userId", null);
+    }
     await next();
   });
 });
 
+// Start a guest session. The guest keeps access only while the browser keeps the cookie.
+app.post("/guest", async (c) => {
+  const form = await c.req.parseBody();
+  const name = String(form.name ?? "").trim().slice(0, 40) || "Guest";
+  const cookie = {
+    path: "/",
+    httpOnly: true,
+    secure: new URL(c.req.url).protocol === "https:",
+    sameSite: "Lax" as const,
+    maxAge: GUEST_COOKIE_SECONDS,
+  };
+  if (!getCookie(c, GUEST_SECRET_COOKIE)) setCookie(c, GUEST_SECRET_COOKIE, randomToken(32), cookie);
+  setCookie(c, GUEST_NAME_COOKIE, name, cookie);
+  return c.redirect(safeReturnPath(form.back));
+});
+
+// End the guest session on this browser.
+app.post("/guest/leave", (c) => {
+  deleteCookie(c, GUEST_SECRET_COOKIE, { path: "/" });
+  deleteCookie(c, GUEST_NAME_COOKIE, { path: "/" });
+  return c.redirect("/");
+});
+
 async function displayName(c: Context<App>, userId: string): Promise<string> {
   if (isLocalMode(c)) return c.env.LOCAL_USER_NAME ?? "Local user";
+  if (c.get("isGuest")) {
+    return (getCookie(c, GUEST_NAME_COOKIE) ?? "").trim().slice(0, 40) || "Guest";
+  }
   const user = await c.get("clerk").users.getUser(userId);
   return (
     [user.firstName, user.lastName].filter(Boolean).join(" ") ||
@@ -77,7 +138,7 @@ async function displayName(c: Context<App>, userId: string): Promise<string> {
 function signIn(c: Context<App>) {
   return c.html(
     <Layout title="Sign in" publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn={false}>
-      <SignInPage />
+      <SignInPage returnPath={new URL(c.req.url).pathname} />
     </Layout>,
   );
 }
@@ -103,7 +164,7 @@ app.get("/", async (c) => {
     .all<{ id: string; name: string }>();
   if (results.length === 1) return c.redirect(`/h/${results[0].id}`);
   return c.html(
-    <Layout title="Your houses" publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
+    <Layout title="Your houses" {...layoutAccess(c)}>
       <HouseListPage houses={results} />
     </Layout>,
   );
@@ -179,7 +240,7 @@ app.get("/h/:houseId", async (c) => {
   const week = weekIndex(new Date());
   const data = await loadHouse(c, houseId, week);
   return c.html(
-    <Layout title={data.house.name} houseName={data.house.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
+    <Layout title={data.house.name} houseName={data.house.name} {...layoutAccess(c)}>
       <HousePage {...data} currentUserId={userId} weekStartsOn={weekStart(week)} pingSent={c.req.query("sent") === "1"} />
     </Layout>,
   );
@@ -192,7 +253,7 @@ app.get("/h/:houseId/setup", async (c) => {
   if (!(await membership(c, houseId, userId))) return c.text("You are not a member of this house.", 403);
   const data = await loadHouse(c, houseId, weekIndex(new Date()));
   return c.html(
-    <Layout title="Set up" houseName={data.house.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
+    <Layout title="Set up" houseName={data.house.name} {...layoutAccess(c)}>
       <SetupPage {...data} currentUserId={userId} inviteUrl={`${new URL(c.req.url).origin}/join/${data.house.invite_code}`} />
     </Layout>,
   );

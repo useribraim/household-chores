@@ -280,13 +280,24 @@ window.addEventListener("pageshow", () => document.querySelectorAll("form[data-p
   send.textContent = send.dataset.label;
 }));
 
+document.querySelectorAll("form[data-confirm]").forEach((form) => form.addEventListener("submit", (event) => {
+  if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+}));
+
 document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => {
   await navigator.clipboard.writeText(button.dataset.copy);
   button.textContent = "Copied";
 }));
 </script>`;
 
-export function Layout(props: { title: string; houseName?: string; publishableKey?: string; signedIn: boolean; children?: Child }) {
+export function Layout(props: {
+  title: string;
+  houseName?: string;
+  publishableKey?: string;
+  signedIn: boolean;
+  isGuest?: boolean;
+  children?: Child;
+}) {
   const host = props.publishableKey ? clerkFrontendHost(props.publishableKey) : "";
   return (
     <html lang="en">
@@ -310,7 +321,13 @@ export function Layout(props: { title: string; houseName?: string; publishableKe
         <main>
           <div class="top">
             <span class="house">{props.houseName ?? "Household Chores"}</span>
-            <div id="account"></div>
+            {props.isGuest ? (
+              <form method="post" action="/guest/leave" data-confirm="Leave the guest session? This browser loses access to your houses, and you cannot get it back.">
+                <button class="btn small ghost" type="submit">Guest · Leave</button>
+              </form>
+            ) : (
+              <div id="account"></div>
+            )}
           </div>
           {props.children}
         </main>
@@ -337,7 +354,7 @@ window.addEventListener("load", async () => {
   );
 }
 
-export function SignInPage() {
+export function SignInPage(props: { returnPath: string }) {
   return (
     <div>
       <div class="hero">
@@ -345,6 +362,16 @@ export function SignInPage() {
         <h1>Chores, without the arguments</h1>
         <p>See who does what this week. Point at a mess on the map. Stay anonymous if you like.</p>
       </div>
+      <div class="card">
+        <div class="title">Try it without an account</div>
+        <p class="hint">Only this browser keeps your access. If you clear the cookies or change device, you lose your houses.</p>
+        <form method="post" action="/guest" class="inline">
+          <input type="hidden" name="back" value={props.returnPath} />
+          <input class="field" name="name" maxlength={40} placeholder="Your name" autocomplete="nickname" aria-label="Your name" />
+          <button class="btn" type="submit">Continue as guest</button>
+        </form>
+      </div>
+      <h2>Or sign in to keep your houses on every device</h2>
       <div id="sign-in"></div>
     </div>
   );
