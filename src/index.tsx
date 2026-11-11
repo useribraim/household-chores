@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
 import { assignChores, weekIndex, weekStart } from "./rotation.mjs";
-import { Layout, SignInPage, HouseListPage, HousePage, AreaPage } from "./pages";
+import { Layout, SignInPage, HouseListPage, HousePage, SetupPage } from "./pages";
 
 type Bindings = {
   DB: D1Database;
@@ -29,7 +29,14 @@ export type Report = {
   created_on: string;
 };
 
-const DEFAULT_AREAS = ["Kitchen", "Living room", "Bathroom", "Hall", "Bins"];
+// A new house starts with these rooms and one chore for each room.
+const DEFAULT_AREAS: [string, string][] = [
+  ["Kitchen", "Wash up and wipe the surfaces"],
+  ["Living room", "Tidy and hoover"],
+  ["Bathroom", "Clean the bathroom"],
+  ["Hall", "Mop the floors"],
+  ["Bins", "Take out the bins"],
+];
 const MAXIMUM_PHOTO_BYTES = 1_500_000;
 
 const app = new Hono<App>();
@@ -113,7 +120,12 @@ app.post("/houses", async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare("INSERT INTO houses (id, name, invite_code) VALUES (?, ?, ?)").bind(houseId, name, randomToken(12)),
     c.env.DB.prepare("INSERT INTO members (house_id, user_id, display_name) VALUES (?, ?, ?)").bind(houseId, userId, name_),
-    ...DEFAULT_AREAS.map((area) => c.env.DB.prepare("INSERT INTO areas (house_id, name) VALUES (?, ?)").bind(houseId, area)),
+    ...DEFAULT_AREAS.map(([area]) => c.env.DB.prepare("INSERT INTO areas (house_id, name) VALUES (?, ?)").bind(houseId, area)),
+    ...DEFAULT_AREAS.map(([area, chore]) =>
+      c.env.DB.prepare(
+        "INSERT INTO chores (house_id, name, area_id) SELECT ?, ?, id FROM areas WHERE house_id = ? AND name = ?",
+      ).bind(houseId, chore, houseId, area),
+    ),
   ]);
   return c.redirect(`/h/${houseId}`);
 });
@@ -167,30 +179,36 @@ app.get("/h/:houseId", async (c) => {
   const week = weekIndex(new Date());
   const data = await loadHouse(c, houseId, week);
   return c.html(
-    <Layout title={data.house.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
-      <HousePage
-        {...data}
-        inviteUrl={`${new URL(c.req.url).origin}/join/${data.house.invite_code}`}
-        currentUserId={userId}
-        weekStartsOn={weekStart(week)}
-      />
+    <Layout title={data.house.name} houseName={data.house.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
+      <HousePage {...data} currentUserId={userId} weekStartsOn={weekStart(week)} pingSent={c.req.query("sent") === "1"} />
     </Layout>,
   );
 });
 
-app.get("/h/:houseId/a/:areaId", async (c) => {
+app.get("/h/:houseId/setup", async (c) => {
   const userId = c.get("userId");
   if (!userId) return signIn(c);
   const houseId = c.req.param("houseId");
   if (!(await membership(c, houseId, userId))) return c.text("You are not a member of this house.", 403);
   const data = await loadHouse(c, houseId, weekIndex(new Date()));
-  const area = data.areas.find((row) => row.id === Number(c.req.param("areaId")));
-  if (!area) return c.text("Area not found", 404);
   return c.html(
-    <Layout title={area.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
-      <AreaPage {...data} area={area} currentUserId={userId} />
+    <Layout title="Set up" houseName={data.house.name} publishableKey={c.env.CLERK_PUBLISHABLE_KEY} signedIn>
+      <SetupPage {...data} currentUserId={userId} inviteUrl={`${new URL(c.req.url).origin}/join/${data.house.invite_code}`} />
     </Layout>,
   );
+});
+
+// A room opens as a sheet on the house page.
+app.get("/h/:houseId/a/:areaId", (c) => c.redirect(`/h/${c.req.param("houseId")}#room-${Number(c.req.param("areaId"))}`));
+
+app.post("/h/:houseId/areas/:areaId/delete", async (c) => {
+  const userId = c.get("userId");
+  const houseId = c.req.param("houseId");
+  if (!userId || !(await membership(c, houseId, userId))) return c.text("Forbidden", 403);
+  await c.env.DB.prepare("DELETE FROM areas WHERE id = ? AND house_id = ?")
+    .bind(Number(c.req.param("areaId")), houseId)
+    .run();
+  return c.redirect(`/h/${houseId}/setup`);
 });
 
 app.post("/h/:houseId/areas", async (c) => {
@@ -200,7 +218,7 @@ app.post("/h/:houseId/areas", async (c) => {
   const form = await c.req.parseBody();
   const name = String(form.name ?? "").trim().slice(0, 40);
   if (name) await c.env.DB.prepare("INSERT INTO areas (house_id, name) VALUES (?, ?)").bind(houseId, name).run();
-  return c.redirect(`/h/${houseId}`);
+  return c.redirect(`/h/${houseId}/setup`);
 });
 
 // Send a ping about one area, with an optional note and an optional photo.
@@ -233,14 +251,14 @@ app.post("/h/:houseId/a/:areaId/reports", async (c) => {
     const bytes = Uint8Array.from(atob(match[1]), (character) => character.charCodeAt(0));
     if (bytes.length <= MAXIMUM_PHOTO_BYTES) photo = bytes;
   }
-  if (!note && !photo) return c.redirect(`/h/${houseId}/a/${areaId}`);
+  if (!note && !photo) return c.redirect(`/h/${houseId}#room-${areaId}`);
 
   await c.env.DB.prepare(
     "INSERT INTO reports (house_id, area_id, target_user_id, sender_user_id, note, photo) VALUES (?, ?, ?, ?, ?, ?)",
   )
     .bind(houseId, areaId, target, anonymous ? null : userId, note, photo ? photo.buffer : null)
     .run();
-  return c.redirect(`/h/${houseId}/a/${areaId}`);
+  return c.redirect(`/h/${houseId}?sent=1`);
 });
 
 app.get("/h/:houseId/reports/:reportId/photo", async (c) => {
@@ -287,6 +305,12 @@ app.post("/h/:houseId/chores", async (c) => {
   return c.redirect(back.startsWith(`/h/${houseId}`) ? back : `/h/${houseId}`);
 });
 
+// Return to the page that sent the form, when that page belongs to this house.
+async function redirectBack(c: Context<App>, houseId: string) {
+  const back = String((await c.req.parseBody()).back ?? "");
+  return c.redirect(back.startsWith(`/h/${houseId}`) ? back : `/h/${houseId}`);
+}
+
 app.post("/h/:houseId/chores/:choreId/delete", async (c) => {
   const userId = c.get("userId");
   const houseId = c.req.param("houseId");
@@ -294,7 +318,7 @@ app.post("/h/:houseId/chores/:choreId/delete", async (c) => {
   await c.env.DB.prepare("DELETE FROM chores WHERE id = ? AND house_id = ?")
     .bind(Number(c.req.param("choreId")), houseId)
     .run();
-  return c.redirect(`/h/${houseId}`);
+  return redirectBack(c, houseId);
 });
 
 // Mark a chore as done for the current week, or clear the mark.
@@ -315,7 +339,7 @@ app.post("/h/:houseId/chores/:choreId/toggle", async (c) => {
       .bind(chore.id, week, userId)
       .run();
   }
-  return c.redirect(`/h/${houseId}`);
+  return redirectBack(c, houseId);
 });
 
 export default app;

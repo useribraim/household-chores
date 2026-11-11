@@ -6,11 +6,13 @@ Live: https://household-chores.useribraim.workers.dev
 
 ## What it does
 
-- **Weekly rotation.** Each chore moves to the next roommate each week. Everyone signs in and sees who does what.
-- **Floor plan.** The house is a plan of areas (kitchen, bathroom, bins). Select an area to see its chores and its open pings.
-- **Pings.** Send a ping about an area to one roommate or to everyone, with a note and a photo of the problem.
-- **Anonymous pings.** An anonymous ping stores no sender. The database row has `sender_user_id = NULL`, so the operator cannot recover the sender. In a house of two people, the other person still knows who sent it.
-- **Photos.** The browser reduces the photo and re-encodes it, which removes the camera metadata. The photo is deleted when the ping is resolved.
+- **Your week.** Each person signs in and sees their chores for the week. One tap marks a chore as done.
+- **Weekly rotation.** Each chore moves to the next roommate each week.
+- **Floor plan.** The house is a plan of rooms. A room shows who has it this week, and it turns red when it has an open ping.
+- **Pings.** Tap a room, select a short note such as "Dishes in the sink", and send. The ping goes to the roommate who has that room this week.
+- **Anonymous pings.** This is the default. An anonymous ping stores no sender: the database row has `sender_user_id = NULL`, so the operator cannot recover the sender. In a house of two people, the other person still knows who sent it.
+- **Photos.** Take a photo, choose one, drop one or paste one. The browser reduces it to a JPEG of 1200 pixels, which removes the camera metadata. The photo is deleted when the ping is resolved.
+- **Set up.** A new house starts with five rooms and one chore for each room. A separate page changes the rooms, the chores and the invitation link.
 
 ## Stack, provisioned with Stripe Projects
 

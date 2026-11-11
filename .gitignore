@@ -2,6 +2,10 @@ node_modules
 .wrangler
 .dev.vars
 
+
+# Holds the Stripe account ID and provider resource IDs. Keep it out of a public repository.
+.projects/state.local.json
+
 .projects/cache
 .projects/vault
 .projects/state.test.json
@@ -9,6 +13,3 @@ node_modules
 .env
 .env.*
 !.env.example
-
-# Holds the Stripe account ID and provider resource IDs. Keep it out of a public repository.
-.projects/state.local.json

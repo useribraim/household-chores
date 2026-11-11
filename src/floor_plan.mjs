@@ -3,12 +3,12 @@
 // looks like rooms in an apartment and not like a uniform table.
 
 const PLAN_WIDTH = 600;
-const ROW_HEIGHT = 150;
-const ROOMS_PER_ROW = 3;
+const ROW_HEIGHT = 180;
+const ROOMS_PER_ROW = 2;
 const WIDTH_PATTERNS = [
-  [5, 3, 4],
-  [3, 5, 4],
-  [4, 4, 4],
+  [7, 5],
+  [5, 7],
+  [6, 6],
 ];
 
 /** Return { width, height, rooms: [{ area, x, y, width, height }] }. */
