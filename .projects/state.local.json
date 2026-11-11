@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "project": {
+    "catalog": "prod",
+    "initializedAt": "2026-11-11T13:07:06.279Z",
+    "merchantDisplayName": null,
+    "merchantId": "acct_1Uab08RfkdIGpd9S",
+    "projectId": "project_61VjzCMAds6pyeDFx16VjyxURzGCbAVylv2CW6F1kI9o",
+    "projectName": "household-chores"
+  },
+  "providers": {
+    "clerk": {
+      "accountRequestId": "facctrq_61VjzDC7QzXu57Rn516VjyxURzGCbAVylv2CW6F1k7MG",
+      "configuration": {},
+      "linkedAt": "2026-11-11T13:08:01.544Z",
+      "providerId": "prvdr_61UGOeSW4e0T9Etwn537w",
+      "providerName": "Clerk",
+      "redirectUrl": null,
+      "requestedAt": "2026-11-11T13:07:58.748Z",
+      "status": "complete"
+    },
+    "cloudflare": {
+      "accountRequestId": "fprvcnn_61VjzDtJVYUj8LNKt16VjyxURzGCbAVylv2CW6F1kCR6",
+      "configuration": {},
+      "linkedAt": "2026-11-11T13:08:41.475Z",
+      "providerId": "prvdr_61UQRSWMdrciFdBNs5Ipc",
+      "providerName": "Cloudflare",
+      "redirectUrl": null,
+      "requestedAt": "2026-11-11T13:08:41.475Z",
+      "status": "complete"
+    }
+  },
+  "resources": {}
+}

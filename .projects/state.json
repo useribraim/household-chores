@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "providers": {
     "clerk": {
       "name": "Clerk"
@@ -8,36 +8,5 @@
       "name": "Cloudflare"
     }
   },
-  "resources": {
-    "auth": {
-      "livemode": true,
-      "name": "auth",
-      "providerName": "Clerk",
-      "serviceId": "auth"
-    },
-    "clerk-plan": {
-      "livemode": true,
-      "name": "clerk-plan",
-      "providerName": "Clerk",
-      "serviceId": "hobby"
-    },
-    "cloudflare-plan": {
-      "livemode": true,
-      "name": "cloudflare-plan",
-      "providerName": "Cloudflare",
-      "serviceId": "workers:free"
-    },
-    "database": {
-      "livemode": true,
-      "name": "database",
-      "providerName": "Cloudflare",
-      "serviceId": "d1"
-    },
-    "hosting": {
-      "livemode": true,
-      "name": "hosting",
-      "providerName": "Cloudflare",
-      "serviceId": "workers"
-    }
-  }
+  "resources": {}
 }
