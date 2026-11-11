@@ -1,0 +1,29 @@
+CREATE TABLE houses (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  invite_code TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (house_id, user_id)
+);
+CREATE TABLE chores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE completions (
+  chore_id INTEGER NOT NULL REFERENCES chores(id) ON DELETE CASCADE,
+  week INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (chore_id, week)
+);
+CREATE INDEX members_by_user ON members (user_id);
+CREATE INDEX chores_by_house ON chores (house_id);

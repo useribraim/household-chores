@@ -1,0 +1,20 @@
+{
+  "name": "household-chores",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate:local": "wrangler d1 migrations apply DB --local",
+    "migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@clerk/backend": "3.27.0",
+    "@hono/clerk-auth": "3.1.1",
+    "hono": "4.13.18"
+  },
+  "devDependencies": {
+    "wrangler": "4.160.0"
+  }
+}

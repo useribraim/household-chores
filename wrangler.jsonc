@@ -1,0 +1,14 @@
+{
+  "name": "household-chores",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "household-chores",
+      "database_id": "5159f4e5-ee6f-449d-ad01-cc2df6811ca9",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
